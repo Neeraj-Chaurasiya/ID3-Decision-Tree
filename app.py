@@ -2,6 +2,11 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import math
+import matplotlib.pyplot as plt
+
+# ---------------------------
+# ID3 Helper Functions
+# ---------------------------
 
 def entropy(col):
     values, counts = np.unique(col, return_counts=True)
@@ -10,20 +15,26 @@ def entropy(col):
 def info_gain(df, attr, target):
     total_entropy = entropy(df[target])
     vals = df[attr].unique()
+
     weighted_entropy = sum(
         (len(df[df[attr] == v]) / len(df)) * entropy(df[df[attr] == v][target])
         for v in vals
     )
+
     return total_entropy - weighted_entropy
 
 def id3(df, target, attrs):
+    # If all target values are same, return that value
     if len(df[target].unique()) == 1:
         return df[target].iloc[0]
 
+    # If no attributes left, return most common class
     if not attrs:
         return df[target].mode()[0]
 
+    # Select best attribute based on information gain
     best = max(attrs, key=lambda a: info_gain(df, a, target))
+
     tree = {best: {}}
 
     for val in df[best].unique():
@@ -44,8 +55,12 @@ def predict(tree, input_data):
 
     return "Unknown"
 
+# ---------------------------
+# Streamlit UI
+# ---------------------------
+
 st.set_page_config(page_title="ID3 Decision Tree Classifier")
-st.title("ID3 Decision Tree Classifier")
+st.title("ID3 Decision Tree Classifier with Graphs")
 
 # Default Play Tennis Dataset
 data_dict = {
@@ -69,17 +84,50 @@ if uploaded_file:
 st.write("Dataset Preview:")
 st.dataframe(df)
 
+# Select Target Column
 target_col = st.selectbox("Select Target Column", df.columns, index=len(df.columns) - 1)
 features = [c for c in df.columns if c != target_col]
 
-if st.button("Train Model"):
+# ---------------------------
+# Class Distribution Plot
+# ---------------------------
+
+st.subheader("Class Distribution")
+fig1, ax1 = plt.subplots()
+df[target_col].value_counts().plot(kind="bar", ax=ax1)
+st.pyplot(fig1)
+
+# ---------------------------
+# Information Gain Plot
+# ---------------------------
+
+st.subheader("Information Gain per Feature")
+ig_values = {attr: info_gain(df, attr, target_col) for attr in features}
+
+fig2, ax2 = plt.subplots()
+ax2.bar(ig_values.keys(), ig_values.values())
+ax2.set_ylabel("Information Gain")
+ax2.set_title("Information Gain of Features")
+st.pyplot(fig2)
+
+# ---------------------------
+# Train Model
+# ---------------------------
+
+if st.button("Train"):
     tree = id3(df, target_col, features)
     st.session_state["tree"] = tree
-    st.write("Trained Decision Tree:")
+
+    st.subheader("Decision Tree (JSON Format)")
     st.json(tree)
 
+# ---------------------------
+# Prediction Section
+# ---------------------------
+
 if "tree" in st.session_state:
-    st.write("Make Prediction:")
+    st.subheader("Prediction")
+
     inputs = {col: st.selectbox(col, df[col].unique()) for col in features}
 
     if st.button("Predict"):
